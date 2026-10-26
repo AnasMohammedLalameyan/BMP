@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BMP &amp; Co. LLP — Activities Dashboard</title>
+<link rel="stylesheet" href="{{ url_for('static', path='vendor/bootstrap.min.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', path='stylesheets/dashboard.css') }}?v={{ version }}">
+<link rel="stylesheet" href="{{ url_for('static', path='stylesheets/app.css') }}?v={{ version }}">
+</head>
+<body>
+
+<div id="appShell" class="d-none">
+<!-- ===== Top bar ===== -->
+<nav class="navbar app-topbar sticky-top px-2 px-md-3">
+  <div class="d-flex align-items-center gap-2">
+    <button class="btn btn-sm btn-outline-secondary d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#sidebar" aria-label="Menu">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+    </button>
+    <div class="brand-seal d-lg-none">BMP</div>
+    <div class="d-lg-none">
+      <div class="brand-name">BMP &amp; Co. LLP</div>
+      <div class="brand-sub">Activities Dashboard</div>
+    </div>
+  </div>
+  <div class="app-topbar-right">
+    <div class="topbar-fy">
+      <label class="form-label" for="coSelect">Company</label>
+      <select class="form-select form-select-sm" id="coSelect" title="The company whose meetings are shown"></select>
+    </div>
+    <div class="topbar-fy">
+      <label class="form-label" for="fySelect">Financial year</label>
+      <select class="form-select form-select-sm" id="fySelect" title="Meetings are filtered to this financial year (April to March)"></select>
+    </div>
+    <button class="btn btn-sm btn-outline-brand" id="btnRefresh" type="button" title="Reload meetings">
+      <svg class="refresh-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>
+      <span class="d-none d-md-inline ms-1">Refresh</span>
+    </button>
+    <button class="btn btn-sm btn-outline-brand" id="btnPrint" type="button">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z"/></svg>
+      <span class="d-none d-md-inline ms-1">Print</span>
+    </button>
+    <div class="dropdown">
+      <button class="btn btn-sm btn-brand dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">Account</button>
+      <ul class="dropdown-menu dropdown-menu-end">
+        <li><a class="dropdown-item" href="/#/launcher">Switch dashboard</a></li>
+        <li><hr class="dropdown-divider"></li>
+        <li><button class="dropdown-item" id="btnSignOut" type="button">Sign out</button></li>
+      </ul>
+    </div>
+    <div class="who-box">
+      <label class="form-label">Signed in as</label>
+      <div class="who-name" id="whoName">—</div>
+      <div class="who-sub" id="whoSub"></div>
+    </div>
+  </div>
+</nav>
+
+<div class="app-body">
+  <!-- ===== Sidebar (offcanvas on < lg, static on lg+) ===== -->
+  <aside class="sidebar offcanvas-lg offcanvas-start" tabindex="-1" id="sidebar" aria-label="Navigation">
+    <div class="offcanvas-header d-lg-none text-white">
+      <h6 class="offcanvas-title mb-0">Navigation</h6>
+      <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" data-bs-target="#sidebar"></button>
+    </div>
+    <div class="offcanvas-body">
+      <div class="sb-brand d-none d-lg-flex">
+        <div class="brand-seal">BMP</div>
+        <div>
+          <div class="sb-brand-name">BMP &amp; Co. LLP</div>
+          <div class="sb-brand-sub">Activities Dashboard</div>
+        </div>
+      </div>
+      <div class="side-scroll">
+        <div id="sideRegisters"></div>
+        <div class="side-cap">Switch</div>
+        <a class="side-top" href="/#/launcher">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="18" height="7"/></svg>
+          <span class="flex-grow-1">All dashboards</span>
+        </a>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ===== Main content ===== -->
+  <main class="content">
+    <div class="content-head">
+      <div class="d-flex justify-content-between align-items-end flex-wrap gap-3 mb-3">
+        <div>
+          <div class="crumb" id="crumb">Activities Dashboard</div>
+          <h1 class="page-title" id="pageTitle">Activities Dashboard</h1>
+          <div class="page-sub" id="pageSub"></div>
+        </div>
+        <div class="d-flex gap-2 no-print" id="regActions"></div>
+      </div>
+    </div>
+    <div id="view"></div>
+  </main>
+</div>
+</div>
+
+<!-- Upload minutes to auto-fill -->
+<div class="modal fade" id="minutesModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Upload minutes to auto-fill</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <input type="file" id="minutesFile" accept=".docx,.pdf" hidden>
+        <div id="minutesDrop" class="file-drop" role="button" tabindex="0">
+          <div><strong>Drag &amp; drop the minutes here</strong></div>
+          <div class="small text-muted">Word (.docx) or PDF — or click to browse</div>
+        </div>
+        <div class="small text-muted mt-2">The agenda and the forms to file are detected automatically for you to review.</div>
+      </div>
+      <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button></div>
+    </div>
+  </div>
+</div>
+
+<div id="modalHost"></div>
+<div class="toast-wrap"><div id="toast" class="toast align-items-center text-bg-dark border-0" role="status"><div class="d-flex"><div class="toast-body" id="toastMsg"></div></div></div></div>
+
+<script src="{{ url_for('static', path='vendor/bootstrap.bundle.min.js') }}"></script>
+<script type="module" src="{{ url_for('static', path='scripts/activities-main.js') }}?v={{ version }}"></script>
+</body>
+</html>

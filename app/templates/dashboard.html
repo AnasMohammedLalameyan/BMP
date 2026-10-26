@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BMP &amp; Co. LLP — Compliance Dashboard</title>
+{#
+  Same shell as the approved dashboard: Bootstrap and the dashboard stylesheet are served from
+  app/static (no CDN), so the UI renders fully on a machine with no internet access.
+  app.css only adds what the new screens need; it never overrides the approved theme.
+#}
+<link rel="stylesheet" href="{{ url_for('static', path='vendor/bootstrap.min.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', path='stylesheets/dashboard.css') }}?v={{ version }}">
+<link rel="stylesheet" href="{{ url_for('static', path='stylesheets/app.css') }}?v={{ version }}">
+</head>
+<body>
+
+<!-- ===== Sign in (shown until the session is valid) ===== -->
+<div id="loginView" class="login-wrap d-none">
+  <div class="login-card tbl-card">
+    <div class="d-flex align-items-center gap-2 mb-3">
+      <div class="brand-seal login-seal">BMP</div>
+      <div>
+        <div class="brand-name fs-5">BMP &amp; Co. LLP</div>
+        <div class="brand-sub">Compliance Dashboard</div>
+      </div>
+    </div>
+    <form id="loginForm" autocomplete="on" novalidate>
+      <div class="mb-3">
+        <label class="form-label" for="loginEmail">Email</label>
+        <input class="form-control" id="loginEmail" type="email" autocomplete="username" required autofocus>
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="loginPassword">Password</label>
+        <input class="form-control" id="loginPassword" type="password" autocomplete="current-password" required>
+      </div>
+      <div class="text-danger small mb-2" id="loginError" role="alert"></div>
+      <button class="btn btn-brand w-100" id="loginBtn" type="submit">Sign in</button>
+    </form>
+    <div class="text-muted small mt-3">Access is granted per company. Ask an administrator if you cannot see a company you expect.</div>
+  </div>
+</div>
+
+<!-- ===== Launcher: shown after sign-in ===== -->
+<div id="launcherView" class="launcher-wrap d-none">
+  <div class="launcher-top">
+    <div class="d-flex align-items-center gap-2">
+      <div class="brand-seal login-seal">BMP</div>
+      <div><div class="brand-name fs-5 text-white">BMP &amp; Co. LLP</div>
+           <div class="brand-sub" style="color:var(--sb-silver)">Compliance Platform</div></div>
+    </div>
+    <div class="text-end">
+      <div class="who-name" id="launcherWho">---</div>
+      <button class="btn btn-sm btn-outline-light mt-1" id="launcherSignOut" type="button">Sign out</button>
+    </div>
+  </div>
+  <div class="launcher-body">
+    <h1 class="launcher-title">Where would you like to work?</h1>
+    <div class="launcher-grid">
+      <a class="launcher-card tbl-card" id="goDatabase" role="button" tabindex="0">
+        <span class="grp-ic launcher-ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg></span>
+        <div class="launcher-card-title">Database Dashboard</div>
+        <div class="launcher-card-text">Company records, directors, shareholders, meetings, filings and the compliance checklists.</div>
+        <span class="launcher-go">Open &rarr;</span>
+      </a>
+      <a class="launcher-card tbl-card" id="goActivities" href="/activities-dashboard">
+        <span class="grp-ic launcher-ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 11l3 3 8-8"/><path d="M20 12v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9"/></svg></span>
+        <div class="launcher-card-title">Activities Dashboard</div>
+        <div class="launcher-card-text">Board, committee and general meeting registers, with minutes upload, compliance checks and Excel export.</div>
+        <span class="launcher-go">Open &rarr;</span>
+      </a>
+    </div>
+  </div>
+</div>
+
+<div id="appShell" class="d-none">
+<!-- ===== Top bar ===== -->
+<nav class="navbar app-topbar sticky-top px-2 px-md-3">
+  <div class="d-flex align-items-center gap-2">
+    <button class="btn btn-sm btn-outline-secondary d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#sidebar" aria-label="Menu">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+    </button>
+    <div class="brand-seal d-lg-none">BMP</div>
+    <div class="d-lg-none">
+      <div class="brand-name">BMP &amp; Co. LLP</div>
+      <div class="brand-sub">Compliance Dashboard</div>
+    </div>
+  </div>
+  <div class="app-topbar-right">
+    <span id="overallBadge" class="badge-soft bs-na d-none d-sm-inline">—</span>
+    <button class="btn btn-sm btn-outline-brand" id="btnRefresh" type="button" disabled title="Reload this company's data from the database">
+      <svg class="refresh-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>
+      <span class="d-none d-md-inline ms-1">Refresh data</span>
+    </button>
+    <button class="btn btn-sm btn-outline-brand" id="btnPrint" type="button">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z"/></svg>
+      <span class="d-none d-md-inline ms-1">Print</span>
+    </button>
+    <button class="btn btn-sm btn-outline-brand topbar-bell" id="btnNotifications" type="button" data-view="notifications"
+      title="Notifications" aria-label="Notifications">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-3px"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+      <span class="bell-badge d-none" id="notifCount">0</span>
+    </button>
+    <div class="topbar-fy" id="fyWrap">
+      <label class="form-label" for="fySelect">Financial year</label>
+      <select class="form-select form-select-sm" id="fySelect" title="Year-based lists (meetings, filings, financials ...) are filtered to this year"></select>
+    </div>
+    <div class="dropdown">
+      <button class="btn btn-sm btn-brand dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">Data</button>
+      <ul class="dropdown-menu dropdown-menu-end">
+        <li><button class="dropdown-item" id="btnExportExcel" type="button">Export Excel (this company)</button></li>
+        <li><button class="dropdown-item" id="btnExport" type="button">Export data (JSON, this company)</button></li>
+        <li><hr class="dropdown-divider"></li>
+        <li><a class="dropdown-item" id="btnSwitchDash" href="#/launcher">Switch dashboard</a></li>
+        <li><hr class="dropdown-divider"></li>
+        <li><button class="dropdown-item" id="btnChangePassword" type="button">Change my password</button></li>
+        <li><button class="dropdown-item" id="btnSignOut" type="button">Sign out</button></li>
+      </ul>
+    </div>
+    <div class="who-box">
+      <label class="form-label">Signed in as</label>
+      <div class="who-name" id="whoName">—</div>
+      <div class="who-sub" id="whoSub"></div>
+    </div>
+  </div>
+</nav>
+
+<div class="app-body">
+  <!-- ===== Sidebar (offcanvas on < lg, static on lg+) ===== -->
+  <aside class="sidebar offcanvas-lg offcanvas-start" tabindex="-1" id="sidebar" aria-label="Navigation">
+    <div class="offcanvas-header d-lg-none text-white">
+      <h6 class="offcanvas-title mb-0">Navigation</h6>
+      <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" data-bs-target="#sidebar"></button>
+    </div>
+    <div class="offcanvas-body">
+      <div class="sb-brand d-none d-lg-flex">
+        <div class="brand-seal">BMP</div>
+        <div>
+          <div class="sb-brand-name">BMP &amp; Co. LLP</div>
+          <div class="sb-brand-sub">Compliance Dashboard</div>
+        </div>
+      </div>
+      <a class="side-top side-companies" id="navCompanies" data-view="companies" role="button">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M3 21V7l6-4 6 4v14"/><path d="M15 21V11l6-4v14"/><path d="M3 21h18"/></svg>
+        <span class="flex-grow-1">All companies</span>
+      </a>
+      <div class="entity-box">
+        <div class="eb-title d-flex justify-content-between align-items-center">
+          <span>Company</span>
+          <button class="eb-exit" id="btnExitCompany" type="button"
+            title="Close this company and return to the Companies list">&times; Exit company</button>
+        </div>
+        <div class="eb-company" id="entityName" title="Switch companies on the Companies page">&mdash;</div>
+        <div class="small" id="entityMeta"></div>
+      </div>
+      <div class="side-scroll">
+        <div id="sideGlobal"></div>
+        <div class="accordion" id="sideAcc"></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ===== Main content ===== -->
+  <main class="content">
+    <div class="content-head">
+      <div class="d-flex justify-content-between align-items-end flex-wrap gap-3 mb-3">
+        <div>
+          <div class="crumb" id="crumb">Overview</div>
+          <h1 class="page-title" id="pageTitle">Compliance Dashboard</h1>
+          <div class="page-sub" id="pageSub">Select a company to begin.</div>
+        </div>
+        <div id="searchWrap" class="no-print d-none" style="min-width:220px">
+          <input class="form-control form-control-sm" id="search" placeholder="Search this list…">
+        </div>
+      </div>
+    </div>
+    <div id="view"></div>
+  </main>
+</div>
+</div>
+
+<div id="modalHost"></div>
+<div class="toast-wrap"><div id="toast" class="toast align-items-center text-bg-dark border-0" role="status"><div class="d-flex"><div class="toast-body" id="toastMsg"></div></div></div></div>
+
+<script src="{{ url_for('static', path='vendor/bootstrap.bundle.min.js') }}"></script>
+<script type="module" src="{{ url_for('static', path='scripts/main.js') }}?v={{ version }}"></script>
+</body>
+</html>

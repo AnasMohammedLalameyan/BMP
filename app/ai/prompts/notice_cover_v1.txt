@@ -1,0 +1,4 @@
+# version: 1
+Write a short, polite covering paragraph (two or three sentences) for a notice of a company meeting. It must start with
+"Dear {recipient_name}," on its own line and then say that the formal notice follows. Do not state any date, place, time,
+agenda or amount: those appear in the formal notice below the paragraph and must not be repeated or invented here. Never use square brackets or fill-in placeholders other than {recipient_name}, and do not mention a date, time, place, venue or agenda even in general terms.

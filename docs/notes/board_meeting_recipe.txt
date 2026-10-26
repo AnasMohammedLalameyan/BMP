@@ -1,0 +1,42 @@
+seq | title | step_type | requires_confirmation | responsible_role | mode | table_name | column_name | is_calculated
+----------------------------------------------------------------------------------------------------
+1 | Confirm Date and Venue | data_entry | False | Company Secretary | write | core.meeting | meeting_date | False
+1 | Confirm Date and Venue | data_entry | False | Company Secretary | write | core.meeting | start_time | False
+1 | Confirm Date and Venue | data_entry | False | Company Secretary | write | core.meeting | venue | False
+1 | Confirm Date and Venue | data_entry | False | Company Secretary | write | core.meeting | venue_mode_id | False
+1 | Confirm Date and Venue | data_entry | False | Company Secretary | write | core.meeting | meeting_date | False
+1 | Confirm Date and Venue | data_entry | False | Company Secretary | write | core.meeting | start_time | False
+1 | Confirm Date and Venue | data_entry | False | Company Secretary | write | core.meeting | venue | False
+1 | Confirm Date and Venue | data_entry | False | Company Secretary | write | core.meeting | venue_mode_id | False
+2 | Prepare Agenda Items | document | False | Company Secretary | read | core.meeting | meeting_number | False
+2 | Prepare Agenda Items | document | False | Company Secretary | write | core.meeting_agenda_item | item_no | False
+2 | Prepare Agenda Items | document | False | Company Secretary | write | core.meeting_agenda_item | text | False
+2 | Prepare Agenda Items | document | False | Company Secretary | read | core.meeting | meeting_number | False
+2 | Prepare Agenda Items | document | False | Company Secretary | write | core.meeting_agenda_item | item_no | False
+2 | Prepare Agenda Items | document | False | Company Secretary | write | core.meeting_agenda_item | text | False
+3 | Draft Notice of Board Meeting | document | False | Company Secretary | read | core.directorship | id | False
+3 | Draft Notice of Board Meeting | document | False | Company Secretary | read | core.company | name | False
+3 | Draft Notice of Board Meeting | document | False | Company Secretary | read | core.meeting | meeting_date | False
+3 | Draft Notice of Board Meeting | document | False | Company Secretary | read | core.directorship | id | False
+3 | Draft Notice of Board Meeting | document | False | Company Secretary | read | core.company | name | False
+3 | Draft Notice of Board Meeting | document | False | Company Secretary | read | core.meeting | meeting_date | False
+4 | Send Notice to Directors | notification | True | Company Secretary | read | core.director | email | False
+4 | Send Notice to Directors | notification | True | Company Secretary | read | core.director | email | False
+5 | Conduct Board Meeting | manual | False | Board of Directors | write | core.meeting | status | False
+5 | Conduct Board Meeting | manual | False | Board of Directors | write | core.meeting | status | False
+6 | Record Attendance | data_entry | False | Company Secretary | write | core.meeting_attendance | attended | False
+6 | Record Attendance | data_entry | False | Company Secretary | write | core.meeting_attendance | directorship_id | False
+6 | Record Attendance | data_entry | False | Company Secretary | write | core.meeting_attendance | mode | False
+6 | Record Attendance | data_entry | False | Company Secretary | write | core.meeting_attendance | attended | False
+6 | Record Attendance | data_entry | False | Company Secretary | write | core.meeting_attendance | directorship_id | False
+6 | Record Attendance | data_entry | False | Company Secretary | write | core.meeting_attendance | mode | False
+7 | Draft Minutes of Meeting | document | False | Company Secretary | read | core.meeting_attendance | attended | False
+7 | Draft Minutes of Meeting | document | False | Company Secretary | read | core.meeting_agenda_item | text | False
+7 | Draft Minutes of Meeting | document | False | Company Secretary | read | core.meeting_attendance | attended | False
+7 | Draft Minutes of Meeting | document | False | Company Secretary | read | core.meeting_agenda_item | text | False
+8 | Sign Minutes of Meeting | approval | True | Chairman | read | core.meeting | id | False
+8 | Sign Minutes of Meeting | approval | True | Chairman | read | core.meeting | id | False
+9 | Update Registers and Filings | check | False | Company Secretary | write | core.government_filing | form_name | False
+9 | Update Registers and Filings | check | False | Company Secretary | write | core.government_filing | status_id | False
+9 | Update Registers and Filings | check | False | Company Secretary | write | core.government_filing | form_name | False
+9 | Update Registers and Filings | check | False | Company Secretary | write | core.government_filing | status_id | False

@@ -1,0 +1,4649 @@
+{
+  "info": {
+    "_postman_id": "c116a69e-fc8f-55dd-8597-7b9e2b6466a9",
+    "name": "BMP Compliance Platform API",
+    "description": "Tests every endpoint of the BMP Compliance Platform API.\n\n**Run order:** use the Collection Runner on the whole collection (folders 00-13 are in dependency order), or run `01 > Login as administrator` first and then any single request.\n\n**Environment:** import `BMP_Compliance_Platform.postman_environment.json` and set the three passwords to the one you gave `python scripts/manage_users.py init-demo`.\n\n**Data:** assumes the seeded demo data (company 2 = BrightMed, company 1 = Nexatech). It creates test records; nothing is ever deleted.\n\nEvery request has test scripts, so a green run proves the API works.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Every change must carry the CSRF token returned by login.",
+          "const m = pm.request.method;",
+          "const token = pm.collectionVariables.get('csrf');",
+          "if (m !== 'GET' && m !== 'HEAD' && token && !pm.request.headers.has('X-CSRF-Token') && !pm.request.url.getPath().endsWith('/auth/login')) {",
+          "  pm.request.headers.add({ key: 'X-CSRF-Token', value: token });",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    },
+    {
+      "key": "adminEmail",
+      "value": "admin@bmpco.in"
+    },
+    {
+      "key": "adminPassword",
+      "value": ""
+    },
+    {
+      "key": "managerEmail",
+      "value": "manager@bmpco.in"
+    },
+    {
+      "key": "managerPassword",
+      "value": ""
+    },
+    {
+      "key": "clientEmail",
+      "value": "client@nexatech.co.in"
+    },
+    {
+      "key": "clientPassword",
+      "value": ""
+    },
+    {
+      "key": "companyId",
+      "value": "2"
+    },
+    {
+      "key": "otherCompanyId",
+      "value": "3"
+    },
+    {
+      "key": "clientCompanyId",
+      "value": "1"
+    },
+    {
+      "key": "csrf",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "00 Health and page",
+      "item": [
+        {
+          "name": "Health check (public)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "health"
+              ]
+            },
+            "description": "No sign-in needed. Use it for monitoring."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Database is up', () => pm.expect(pm.response.json().database).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Dashboard page (public)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('HTML is served', () => pm.expect(pm.response.text()).to.include('Compliance Dashboard'));",
+                  "pm.test('Security headers present', () => { pm.expect(pm.response.headers.get('X-Frame-Options')).to.eql('DENY'); pm.expect(pm.response.headers.get('Content-Security-Policy')).to.include(\"default-src 'self'\"); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "01 Authentication and session",
+      "item": [
+        {
+          "name": "Not signed in -> 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "me"
+              ]
+            },
+            "description": "Run this before logging in (or after logging out) to see the protection."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Error code is unauthenticated', () => pm.expect(pm.response.json().error.code).to.eql('unauthenticated'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login with a wrong password -> 401",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"definitely-wrong\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Counts towards the lock-out (5 failures in 10 minutes). Run it once."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Error code is bad_credentials', () => pm.expect(pm.response.json().error.code).to.eql('bad_credentials'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login as administrator",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Signs in. The test script stores the returned CSRF token in the collection variable `csrf`; the collection's pre-request script then sends it as the `X-CSRF-Token` header on every change. The session cookie is kept by Postman's cookie jar."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "try { const v = (j.csrf); if (v !== undefined && v !== null) pm.collectionVariables.set('csrf', String(v)); } catch (e) {}",
+                  "pm.test('Returns the user and a CSRF token', () => { pm.expect(j.csrf).to.be.a('string').and.not.empty; pm.expect(j.user.email).to.be.a('string'); });",
+                  "pm.test('is_admin is true', () => pm.expect(j.user.is_admin).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Who am I",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "me"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "try { const v = (j.user.id); if (v !== undefined && v !== null) pm.collectionVariables.set('adminUserId', String(v)); } catch (e) {}",
+                  "pm.test('Signed in as the administrator', () => pm.expect(j.user.email).to.eql(pm.variables.get('adminEmail')));",
+                  "pm.test('Has access to companies', () => pm.expect(Object.keys(j.user.access).length).to.be.above(0));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Change my password (to the same value)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "password"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"current_password\": \"{{adminPassword}}\",\n  \"new_password\": \"{{adminPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Safe to run: the new password equals the current one. Needs at least 8 characters."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Change my password - wrong current -> 403",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "password"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"current_password\": \"wrong\",\n  \"new_password\": \"AnotherPassw0rd!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "A change without the CSRF token -> 403 (see note)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/entities/company_rta",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "entities",
+                "company_rta"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"company_id\": \"{{companyId}}\",\n  \"name\": \"x\",\n  \"valid_from\": \"2024-04-01\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "The pre-request script deliberately overrides the token with a wrong one to demonstrate CSRF protection."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.request.headers.upsert({ key: 'X-CSRF-Token', value: 'wrong-token' });"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));",
+                  "pm.test('Error code is csrf', () => pm.expect(pm.response.json().error.code).to.eql('csrf'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 Metadata (the self-describing API)",
+      "item": [
+        {
+          "name": "Get all metadata",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/meta",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "meta"
+              ]
+            },
+            "description": "Everything the UI needs to draw itself: entities, fields, dropdown lists, navigation, calculated views, policy flags."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "try { const v = (j.lookups.MEETING_TYPE.find(x => x.code === 'BOARD').id || j.lookups.MEETING_TYPE[0].id); if (v !== undefined && v !== null) pm.collectionVariables.set('meetingTypeId', String(v)); } catch (e) {}",
+                  "try { const v = (j.lookups.DESIGNATION[0].id); if (v !== undefined && v !== null) pm.collectionVariables.set('designationId', String(v)); } catch (e) {}",
+                  "try { const v = (j.lookups.DIRECTOR_CATEGORY[0].id); if (v !== undefined && v !== null) pm.collectionVariables.set('boardCategoryId', String(v)); } catch (e) {}",
+                  "try { const v = (Object.keys(j.entities).length); if (v !== undefined && v !== null) pm.collectionVariables.set('documentTypeEntityCount', String(v)); } catch (e) {}",
+                  "pm.test('65 record types for an administrator', () => pm.expect(Object.keys(j.entities).length).to.eql(65));",
+                  "pm.test('19 Standard Lists', () => pm.expect(Object.keys(j.lookups).length).to.eql(19));",
+                  "pm.test('13 calculated views', () => pm.expect(Object.keys(j.views).length).to.eql(13));",
+                  "pm.test('Fields describe their type and requirement', () => { const c = j.entities.meeting.columns.find(x => x.name === 'meeting_date'); pm.expect(c.kind).to.eql('date'); pm.expect(c.required).to.eql(true); });",
+                  "pm.test('Sensitive columns are disabled by policy', () => { const c = j.entities.director.columns.find(x => x.name === 'aadhaar_encrypted'); pm.expect(c.secret_enabled).to.eql(false); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Dropdown options - board stints of a company",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/options/directorship?company_id={{companyId}}&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "options",
+                "directorship"
+              ],
+              "query": [
+                {
+                  "key": "company_id",
+                  "value": "{{companyId}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Options have id and label', () => { pm.expect(j.options.length).to.be.above(0); pm.expect(j.options[0]).to.have.keys('id', 'label'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Dropdown options - search by text",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/options/director?q=joshi",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "options",
+                "director"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "joshi"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "try { const v = (j.options[0].id); if (v !== undefined && v !== null) pm.collectionVariables.set('directorId', String(v)); } catch (e) {}",
+                  "pm.test('Search finds the director', () => pm.expect(j.options.some(o => o.label.includes('Joshi'))).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Dropdown options - fetch by ids",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/options/director?ids={{directorId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "options",
+                "director"
+              ],
+              "query": [
+                {
+                  "key": "ids",
+                  "value": "{{directorId}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Exactly the requested record', () => pm.expect(j.options.length).to.eql(1));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 Companies",
+      "item": [
+        {
+          "name": "List my companies",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/companies",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "companies"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Companies carry counts', () => { pm.expect(j.companies.length).to.be.above(0); pm.expect(j.companies[0]).to.include.keys('name', 'cin', 'directors', 'overdue_filings', 'access_level'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Financial years that have data",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/companies/{{companyId}}/years",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "companies",
+                "{{companyId}}",
+                "years"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Years and the current year', () => { pm.expect(j.years).to.be.an('array'); pm.expect(j.current).to.match(/^\\d{4}-\\d{2}$/); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Overview (tiles, attention, rules, segments)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/companies/{{companyId}}/overview?fy=2024-25",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "companies",
+                "{{companyId}}",
+                "overview"
+              ],
+              "query": [
+                {
+                  "key": "fy",
+                  "value": "2024-25"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Overview has tiles, rules and segments', () => { pm.expect(j.tiles).to.include.keys('directors', 'meetings_held', 'overdue_filings'); pm.expect(j.rules.total).to.be.above(38); pm.expect(j.segments.length).to.be.above(3); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Applicability rules for a year",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/companies/{{companyId}}/rules?fy=2024-25",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "companies",
+                "{{companyId}}",
+                "rules"
+              ],
+              "query": [
+                {
+                  "key": "fy",
+                  "value": "2024-25"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "try { const v = (j.rules.find(r => r.code === 'CSR_SPENDING').rule_id); if (v !== undefined && v !== null) pm.collectionVariables.set('ruleId', String(v)); } catch (e) {}",
+                  "pm.test('Rules with evaluations and computed checks', () => { pm.expect(j.rules.length).to.be.above(38); pm.expect(j.computed).to.have.keys('RESIDENT_DIRECTOR', 'WOMAN_DIRECTOR'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Record a rule evaluation (new dated record)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/entities/rule_evaluation",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "entities",
+                "rule_evaluation"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"company_id\": \"{{companyId}}\",\n  \"rule_id\": \"{{ruleId}}\",\n  \"financial_year\": \"2024-25\",\n  \"applies\": true,\n  \"status\": \"pending\",\n  \"notes\": \"Created from Postman\",\n  \"inputs\": {\n    \"net_profit\": \"to be confirmed\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Evaluation time is stamped by the database', () => pm.expect(j.row.evaluated_on).to.be.a('string'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Export one company (Excel)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/companies/{{companyId}}/export.xlsx",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "companies",
+                "{{companyId}}",
+                "export.xlsx"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Is an Excel workbook', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('spreadsheetml'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Export one company (JSON)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/companies/{{companyId}}/export.json",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "companies",
+                "{{companyId}}",
+                "export.json"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Has a sheet per record type', () => pm.expect(Object.keys(j.entities).length).to.be.above(40));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add a company (administrator)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/companies",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "companies"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cin\": \"{{newCin}}\",\n  \"name\": \"Postman Test Company Private Limited\",\n  \"date_of_incorporation\": \"2020-04-01\",\n  \"status\": \"active\",\n  \"pan\": \"AAAPA1234A\",\n  \"roc\": \"Mumbai\",\n  \"registered_address\": \"1 Test Road, Mumbai\",\n  \"email\": \"test@example.test\",\n  \"phone\": \"02212345678\",\n  \"is_listed\": false,\n  \"ind_as_applicable\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Needs an administrator. The pre-request script invents a unique 21-character CIN."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('newCin', 'U' + String(Date.now()).padStart(20, '0'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "try { const v = (j.row.id); if (v !== undefined && v !== null) pm.collectionVariables.set('newCompanyId', String(v)); } catch (e) {}",
+                  "try { const v = (j.row.updated_at); if (v !== undefined && v !== null) pm.collectionVariables.set('newCompanyVersion', String(v)); } catch (e) {}",
+                  "pm.test('Creator is given access', () => pm.expect(j.row.id).to.be.a('number'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Edit that company (version-checked)",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/entities/company/{{newCompanyId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "entities",
+                "company",
+                "{{newCompanyId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"website\": \"https://example.test\",\n  \"updated_at\": \"{{newCompanyVersion}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "try { const v = (j.row.updated_at); if (v !== undefined && v !== null) pm.collectionVariables.set('newCompanyVersion', String(v)); } catch (e) {}",
+                  "pm.test('Website saved', () => pm.expect(j.row.website).to.eql('https://example.test'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Archive that company (nothing is deleted)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/entities/company/{{newCompanyId}}/archive",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "entities",
+                "company",
+                "{{newCompanyId}}",
+                "archive"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Archived flag set', () => pm.expect(j.row.is_archived).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 Generic records (any table) - full lifecycle",
+      "item": [
+        {
+          "name": "Create a record (Registrar & Transfer Agent)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/entities/company_rta",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "entities",
+                "company_rta"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"company_id\": \"{{companyId}}\",\n  \"name\": \"Postman RTA Services\",\n  \"address\": \"Andheri, Mumbai\",\n  \"phone\": \"02200000000\",\n  \"email\": \"rta@example.test\",\n  \"sebi_reg_no\": \"INR000000001\",\n  \"valid_from\": \"2024-04-01\",\n  \"valid_to\": \"2027-03-31\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "try { const v = (j.row.id); if (v !== undefined && v !== null) pm.collectionVariables.set('rtaId', String(v)); } catch (e) {}",
+                  "try { const v = (j.row.updated_at); if (v !== undefined && v !== null) pm.collectionVariables.set('rtaVersion', String(v)); } catch (e) {}",
+                  "try { const v = (j.row.updated_at); if (v !== undefined && v !== null) pm.collectionVariables.set('rtaVersion0', String(v)); } catch (e) {}",
+                  "pm.test('Foreign key comes back with a readable label', () => pm.expect(j.row._labels.company_id).to.be.a('string'));",
+                  "pm.test('System columns filled by the database', () => { pm.expect(j.row.created_at).to.be.a('string'); pm.expect(j.row.is_archived).to.eql(false); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List with search, sort and paging",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/entities/company_rta?company_id={{companyId}}&q=Postman&sort=valid_from&desc=true&page=1&size=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "entities",
+                "company_rta"
+              ],
+              "query": [
+                {
+                  "key": "company_id",
+                  "value": "{{companyId}}"
+                },
+                {
+                  "key": "q",
+                  "value": "Postman"
+                },
+                {
+                  "key": "sort",
+                  "value": "valid_from"
+                },
+                {
+                  "key": "desc",
+                  "value": "true"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "size",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Finds the record', () => { pm.expect(j.total).to.be.above(0); pm.expect(j.rows[0].name).to.include('Postman'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List filtered by a column and financial year",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/entities/meeting?company_id={{companyId}}&fy=2024-25&f_status=held",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "entities",
+                "meeting"
+              ],
+              "query": [
+                {
+                  "key": "company_id",
+                  "value": "{{companyId}}"
+                },
+                {
+                  "key": "fy",
+                  "value": "2024-25"
+                },
+                {
+                  "key": "f_status",
+                  "value": "held"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Only held meetings', () => j.rows.forEach(r => pm.expect(r.status).to.eql('held')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get one record",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/entities/company_rta/{{rtaId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "entities",
+                "company_rta",
+                "{{rtaId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Same record', () => pm.expect(j.row.id).to.eql(Number(pm.collectionVariables.get('rtaId'))));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Edit with the version you last saw",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/entities/company_rta/{{rtaId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "entities",
+                "company_rta",
+                "{{rtaId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"02211111111\",\n  \"updated_at\": \"{{rtaVersion}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "try { const v = (j.row.updated_at); if (v !== undefined && v !== null) pm.collectionVariables.set('rtaVersion', String(v)); } catch (e) {}",
+                  "pm.test('Value changed and version moved', () => { pm.expect(j.row.phone).to.eql('02211111111'); pm.expect(j.row.updated_at).to.not.eql(pm.collectionVariables.get('rtaVersion0')); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Edit with a stale version -> 409",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/entities/company_rta/{{rtaId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "entities",
+                "company_rta",
+                "{{rtaId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"02299999999\",\n  \"updated_at\": \"{{rtaVersion0}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Two people editing at once: the second is told to reload instead of silently overwriting."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 409', () => pm.response.to.have.status(409));",
+                  "pm.test('Error code is stale', () => pm.expect(pm.response.json().error.code).to.eql('stale'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Validation errors name the fields -> 422",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/entities/company_rta",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "entities",
+                "company_rta"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"company_id\": \"{{companyId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 422', () => pm.response.to.have.status(422));",
+                  "pm.test('Required fields are named', () => pm.expect(Object.keys(pm.response.json().error.fields)).to.include.members(['name', 'valid_from']));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "A database rule in plain language -> 422",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/entities/company_business_activity",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "entities",
+                "company_business_activity"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"company_id\": \"{{companyId}}\",\n  \"description\": \"Too much\",\n  \"turnover_percent\": 140\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 422', () => pm.response.to.have.status(422));",
+                  "pm.test('Friendly message', () => pm.expect(pm.response.json().error.message).to.include('between 0 and 100'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Record history (who, when, from -> to)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/entities/company_rta/{{rtaId}}/history",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "entities",
+                "company_rta",
+                "{{rtaId}}",
+                "history"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Created and changed entries', () => { pm.expect(j.entries.length).to.be.above(1); pm.expect(j.entries[0].operation).to.eql('UPDATE'); pm.expect(j.entries[0].changes.phone.to).to.eql('02211111111'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Archive (hide, never delete)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/entities/company_rta/{{rtaId}}/archive",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "entities",
+                "company_rta",
+                "{{rtaId}}",
+                "archive"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Archived', () => pm.expect(j.row.is_archived).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Archived record appears only when asked",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/entities/company_rta?company_id={{companyId}}&q=Postman&archived=true",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "entities",
+                "company_rta"
+              ],
+              "query": [
+                {
+                  "key": "company_id",
+                  "value": "{{companyId}}"
+                },
+                {
+                  "key": "q",
+                  "value": "Postman"
+                },
+                {
+                  "key": "archived",
+                  "value": "true"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Included with archived=true', () => pm.expect(j.rows.some(r => r.is_archived)).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Restore",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/entities/company_rta/{{rtaId}}/restore",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "entities",
+                "company_rta",
+                "{{rtaId}}",
+                "restore"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Restored', () => pm.expect(j.row.is_archived).to.eql(false));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Export a list as CSV",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/entities/company_rta/export.csv?company_id={{companyId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "entities",
+                "company_rta",
+                "export.csv"
+              ],
+              "query": [
+                {
+                  "key": "company_id",
+                  "value": "{{companyId}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('CSV with a header row', () => { pm.expect(pm.response.headers.get('Content-Type')).to.include('text/csv'); pm.expect(pm.response.text()).to.include('Name'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "DELETE is not offered -> 405",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/entities/company_rta/{{rtaId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "entities",
+                "company_rta",
+                "{{rtaId}}"
+              ]
+            },
+            "description": "There is no delete anywhere in the API (and the database forbids it too)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 405', () => pm.response.to.have.status(405));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unknown record type -> 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/entities/not_a_table",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "entities",
+                "not_a_table"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Error code is not_found', () => pm.expect(pm.response.json().error.code).to.eql('not_found'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create a meeting (lookup + dates + enum)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/entities/meeting",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "entities",
+                "meeting"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"company_id\": \"{{companyId}}\",\n  \"meeting_type_id\": \"{{meetingTypeId}}\",\n  \"financial_year\": \"2024-25\",\n  \"meeting_number\": \"PM-1\",\n  \"meeting_date\": \"2025-02-20\",\n  \"start_time\": \"11:00\",\n  \"end_time\": \"13:00\",\n  \"venue\": \"Postman Boardroom\",\n  \"status\": \"planned\",\n  \"remarks\": \"Created from Postman\",\n  \"members_entitled\": 4\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "try { const v = (j.row.id); if (v !== undefined && v !== null) pm.collectionVariables.set('meetingId', String(v)); } catch (e) {}",
+                  "try { const v = (j.row.updated_at); if (v !== undefined && v !== null) pm.collectionVariables.set('meetingVersion', String(v)); } catch (e) {}",
+                  "pm.test('Lookup comes back labelled', () => pm.expect(j.row._labels.meeting_type_id).to.be.a('string'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "A lookup from the wrong list -> 422",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/entities/meeting",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "entities",
+                "meeting"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"company_id\": \"{{companyId}}\",\n  \"meeting_type_id\": \"{{designationId}}\",\n  \"financial_year\": \"2024-25\",\n  \"meeting_date\": \"2025-02-21\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 422', () => pm.response.to.have.status(422));",
+                  "pm.test('Names the field', () => pm.expect(pm.response.json().error.fields).to.have.property('meeting_type_id'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mark the meeting as held",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/entities/meeting/{{meetingId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "entities",
+                "meeting",
+                "{{meetingId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"held\",\n  \"updated_at\": \"{{meetingVersion}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Status updated', () => pm.expect(j.row.status).to.eql('held'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add an agenda item to it (child record)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/entities/meeting_agenda_item",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "entities",
+                "meeting_agenda_item"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"meeting_id\": \"{{meetingId}}\",\n  \"item_no\": 1,\n  \"text\": \"Approve the minutes of the previous meeting\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05 Directors and KMP register",
+      "item": [
+        {
+          "name": "Board register (every stint, current and ceased)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/companies/{{companyId}}/directors-register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "companies",
+                "{{companyId}}",
+                "directors-register"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Has current and ceased stints', () => { pm.expect(j.rows.length).to.be.above(0); pm.expect(j.rows[0]).to.include.keys('full_name', 'din', 'designation', 'start_date', 'is_current'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register - current directors only",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/companies/{{companyId}}/directors-register?include_ceased=false",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "companies",
+                "{{companyId}}",
+                "directors-register"
+              ],
+              "query": [
+                {
+                  "key": "include_ceased",
+                  "value": "false"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Only current', () => j.rows.forEach(r => pm.expect(r.is_current).to.eql(true)));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add a NEW person to the board in one step",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/companies/{{companyId}}/directors-register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "companies",
+                "{{companyId}}",
+                "directors-register"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"director\": {\n    \"full_name\": \"Postman Director\",\n    \"din\": \"{{newDin}}\",\n    \"gender\": \"F\",\n    \"email\": \"postman.director@example.test\",\n    \"date_of_birth\": \"1985-06-15\",\n    \"nationality\": \"Indian\"\n  },\n  \"directorship\": {\n    \"start_date\": \"2026-04-01\",\n    \"is_independent\": true,\n    \"director_category_id\": \"{{boardCategoryId}}\"\n  },\n  \"designation_id\": \"{{designationId}}\",\n  \"designation_start\": \"2026-04-01\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('newDin', String(10000000 + (Math.floor(Date.now() / 1000) % 80000000)));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "try { const v = (j.row.directorship_id); if (v !== undefined && v !== null) pm.collectionVariables.set('newDirectorshipId', String(v)); } catch (e) {}",
+                  "try { const v = (j.row.director_id); if (v !== undefined && v !== null) pm.collectionVariables.set('newDirectorId', String(v)); } catch (e) {}",
+                  "pm.test('Person created with stint and designation', () => { pm.expect(j.person_created).to.eql(true); pm.expect(j.row.designation).to.be.a('string'); pm.expect(j.row.is_current).to.eql(true); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "The same DIN on another company REUSES the person",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/companies/{{otherCompanyId}}/directors-register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "companies",
+                "{{otherCompanyId}}",
+                "directors-register"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"director\": {\n    \"full_name\": \"Someone Else\",\n    \"din\": \"{{newDin}}\"\n  },\n  \"directorship\": {\n    \"start_date\": \"2026-05-01\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Existing person reused (name unchanged)', () => { pm.expect(j.person_created).to.eql(false); pm.expect(j.row.full_name).to.eql('Postman Director'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Overlapping stint is refused -> 409",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/companies/{{companyId}}/directors-register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "companies",
+                "{{companyId}}",
+                "directors-register"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"director\": {\n    \"full_name\": \"Postman Director\",\n    \"din\": \"{{newDin}}\"\n  },\n  \"directorship\": {\n    \"start_date\": \"2026-06-01\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 409', () => pm.response.to.have.status(409));",
+                  "pm.test('Error code is overlap', () => pm.expect(pm.response.json().error.code).to.eql('overlap'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Missing appointment date -> 422",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/companies/{{companyId}}/directors-register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "companies",
+                "{{companyId}}",
+                "directors-register"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"director\": {\n    \"full_name\": \"No Date\"\n  },\n  \"directorship\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 422', () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "06 Meetings",
+      "item": [
+        {
+          "name": "Meetings book for a year",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/companies/{{companyId}}/meetings-book?fy=2024-25",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "companies",
+                "{{companyId}}",
+                "meetings-book"
+              ],
+              "query": [
+                {
+                  "key": "fy",
+                  "value": "2024-25"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "try { const v = (j.meetings.find(m => m.meeting_number === 'BM-1').id); if (v !== undefined && v !== null) pm.collectionVariables.set('seedMeetingId', String(v)); } catch (e) {}",
+                  "pm.test('Meetings carry agenda and attendance', () => { pm.expect(j.meetings.length).to.be.above(0); pm.expect(j.meetings[0]).to.include.keys('agenda', 'attendance', 'meeting_type'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "One meeting in full (with the board roster)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/meetings/{{seedMeetingId}}/detail",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "meetings",
+                "{{seedMeetingId}}",
+                "detail"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "try { const v = (j.meeting.roster[0].directorship_id); if (v !== undefined && v !== null) pm.collectionVariables.set('rosterDirectorshipId', String(v)); } catch (e) {}",
+                  "pm.test('Roster = directors on the board that day', () => pm.expect(j.meeting.roster.length).to.be.above(0));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Save attendance by roster (create or update, never duplicate)",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/meetings/{{seedMeetingId}}/attendance",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "meetings",
+                "{{seedMeetingId}}",
+                "attendance"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rows\": [\n    {\n      \"directorship_id\": \"{{rosterDirectorshipId}}\",\n      \"attended\": true,\n      \"mode\": \"Physical\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Saved', () => { pm.expect(j.saved).to.eql(1); pm.expect(j.attended).to.be.above(0); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "07 Calculated values (database views)",
+      "item": [
+        {
+          "name": "v_current_directors",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/calc/v_current_directors?company_id={{companyId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "calc",
+                "v_current_directors"
+              ],
+              "query": [
+                {
+                  "key": "company_id",
+                  "value": "{{companyId}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Returns columns and rows', () => { pm.expect(j.columns).to.be.an('array').and.not.empty; pm.expect(j.rows).to.be.an('array'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "v_director_history",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/calc/v_director_history?company_id={{companyId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "calc",
+                "v_director_history"
+              ],
+              "query": [
+                {
+                  "key": "company_id",
+                  "value": "{{companyId}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Returns columns and rows', () => { pm.expect(j.columns).to.be.an('array').and.not.empty; pm.expect(j.rows).to.be.an('array'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "v_director_age",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/calc/v_director_age?company_id={{companyId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "calc",
+                "v_director_age"
+              ],
+              "query": [
+                {
+                  "key": "company_id",
+                  "value": "{{companyId}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Returns columns and rows', () => { pm.expect(j.columns).to.be.an('array').and.not.empty; pm.expect(j.rows).to.be.an('array'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "v_shareholding_percent",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/calc/v_shareholding_percent?company_id={{companyId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "calc",
+                "v_shareholding_percent"
+              ],
+              "query": [
+                {
+                  "key": "company_id",
+                  "value": "{{companyId}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Returns columns and rows', () => { pm.expect(j.columns).to.be.an('array').and.not.empty; pm.expect(j.rows).to.be.an('array'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "v_top10_shareholders",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/calc/v_top10_shareholders?company_id={{companyId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "calc",
+                "v_top10_shareholders"
+              ],
+              "query": [
+                {
+                  "key": "company_id",
+                  "value": "{{companyId}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Returns columns and rows', () => { pm.expect(j.columns).to.be.an('array').and.not.empty; pm.expect(j.rows).to.be.an('array'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "v_company_shareholder_counts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/calc/v_company_shareholder_counts?company_id={{companyId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "calc",
+                "v_company_shareholder_counts"
+              ],
+              "query": [
+                {
+                  "key": "company_id",
+                  "value": "{{companyId}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Returns columns and rows', () => { pm.expect(j.columns).to.be.an('array').and.not.empty; pm.expect(j.rows).to.be.an('array'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "v_director_attendance_summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/calc/v_director_attendance_summary?company_id={{companyId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "calc",
+                "v_director_attendance_summary"
+              ],
+              "query": [
+                {
+                  "key": "company_id",
+                  "value": "{{companyId}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Returns columns and rows', () => { pm.expect(j.columns).to.be.an('array').and.not.empty; pm.expect(j.rows).to.be.an('array'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "v_committee_attendance_percent",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/calc/v_committee_attendance_percent?company_id={{companyId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "calc",
+                "v_committee_attendance_percent"
+              ],
+              "query": [
+                {
+                  "key": "company_id",
+                  "value": "{{companyId}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Returns columns and rows', () => { pm.expect(j.columns).to.be.an('array').and.not.empty; pm.expect(j.rows).to.be.an('array'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "v_independent_director_years",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/calc/v_independent_director_years?company_id={{companyId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "calc",
+                "v_independent_director_years"
+              ],
+              "query": [
+                {
+                  "key": "company_id",
+                  "value": "{{companyId}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Returns columns and rows', () => { pm.expect(j.columns).to.be.an('array').and.not.empty; pm.expect(j.rows).to.be.an('array'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "v_s186_running_total",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/calc/v_s186_running_total?company_id={{companyId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "calc",
+                "v_s186_running_total"
+              ],
+              "query": [
+                {
+                  "key": "company_id",
+                  "value": "{{companyId}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Returns columns and rows', () => { pm.expect(j.columns).to.be.an('array').and.not.empty; pm.expect(j.rows).to.be.an('array'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "v_filings_overdue",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/calc/v_filings_overdue?company_id={{companyId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "calc",
+                "v_filings_overdue"
+              ],
+              "query": [
+                {
+                  "key": "company_id",
+                  "value": "{{companyId}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Returns columns and rows', () => { pm.expect(j.columns).to.be.an('array').and.not.empty; pm.expect(j.rows).to.be.an('array'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "v_rule_resident_director",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/calc/v_rule_resident_director?company_id={{companyId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "calc",
+                "v_rule_resident_director"
+              ],
+              "query": [
+                {
+                  "key": "company_id",
+                  "value": "{{companyId}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Returns columns and rows', () => { pm.expect(j.columns).to.be.an('array').and.not.empty; pm.expect(j.rows).to.be.an('array'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "v_rule_woman_director",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/calc/v_rule_woman_director?company_id={{companyId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "calc",
+                "v_rule_woman_director"
+              ],
+              "query": [
+                {
+                  "key": "company_id",
+                  "value": "{{companyId}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Returns columns and rows', () => { pm.expect(j.columns).to.be.an('array').and.not.empty; pm.expect(j.rows).to.be.an('array'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unknown view -> 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/calc/not_a_view",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "calc",
+                "not_a_view"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "The database views, filtered by the API to the companies the user may see."
+    },
+    {
+      "name": "08 Activities and tasks",
+      "item": [
+        {
+          "name": "List activity templates",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/templates",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "activities",
+                "templates"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "try { const v = (j.templates[0].id); if (v !== undefined && v !== null) pm.collectionVariables.set('templateId', String(v)); } catch (e) {}",
+                  "try { const v = (j.templates[0].code); if (v !== undefined && v !== null) pm.collectionVariables.set('templateCode', String(v)); } catch (e) {}",
+                  "pm.test('Board Meeting template, 9 steps', () => { pm.expect(j.templates[0].code).to.eql('BOARD_MEETING'); pm.expect(j.templates[0].steps).to.eql(9); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Template detail (steps, bindings, evidence)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/templates/{{templateId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "activities",
+                "templates",
+                "{{templateId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('9 ordered steps with bindings', () => { pm.expect(j.steps.length).to.eql(9); pm.expect(j.steps[0].bindings.length).to.be.above(0); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Template as one JSON document (the shape a future MCP tool will use)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/templates/{{templateCode}}/json",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "activities",
+                "templates",
+                "{{templateCode}}",
+                "json"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Has template and steps', () => { pm.expect(j.template.code).to.eql('BOARD_MEETING'); pm.expect(j.steps.length).to.eql(9); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Start without required fields -> 422",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/instances",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "activities",
+                "instances"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"template_code\": \"BOARD_MEETING\",\n  \"company_id\": \"{{companyId}}\",\n  \"params\": {\n    \"venue\": \"x\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 422', () => pm.response.to.have.status(422));",
+                  "pm.test('Missing fields named', () => pm.expect(Object.keys(pm.response.json().error.fields)).to.include('params.meeting_date'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Start a Board Meeting activity (creates 9 tasks with due dates)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/instances",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "activities",
+                "instances"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"template_code\": \"BOARD_MEETING\",\n  \"company_id\": \"{{companyId}}\",\n  \"params\": {\n    \"meeting_date\": \"2026-12-10\",\n    \"start_time\": \"11:00\",\n    \"venue\": \"5th Floor, Nariman Point, Mumbai\",\n    \"venue_mode\": \"PHYSICAL\",\n    \"agenda_items\": [\n      \"Approve the accounts\",\n      \"Appoint the auditor\"\n    ]\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "try { const v = (j.instance.id); if (v !== undefined && v !== null) pm.collectionVariables.set('instanceId', String(v)); } catch (e) {}",
+                  "try { const v = (j.tasks.find(t => t.step.seq === 1).id); if (v !== undefined && v !== null) pm.collectionVariables.set('taskId1', String(v)); } catch (e) {}",
+                  "try { const v = (j.tasks.find(t => t.step.seq === 2).id); if (v !== undefined && v !== null) pm.collectionVariables.set('taskId2', String(v)); } catch (e) {}",
+                  "try { const v = (j.tasks.find(t => t.step.seq === 3).id); if (v !== undefined && v !== null) pm.collectionVariables.set('taskId3', String(v)); } catch (e) {}",
+                  "try { const v = (j.tasks.find(t => t.step.seq === 4).id); if (v !== undefined && v !== null) pm.collectionVariables.set('taskId4', String(v)); } catch (e) {}",
+                  "try { const v = (j.tasks.find(t => t.step.seq === 5).id); if (v !== undefined && v !== null) pm.collectionVariables.set('taskId5', String(v)); } catch (e) {}",
+                  "try { const v = (j.tasks.find(t => t.step.seq === 6).id); if (v !== undefined && v !== null) pm.collectionVariables.set('taskId6', String(v)); } catch (e) {}",
+                  "try { const v = (j.tasks.find(t => t.step.seq === 7).id); if (v !== undefined && v !== null) pm.collectionVariables.set('taskId7', String(v)); } catch (e) {}",
+                  "try { const v = (j.tasks.find(t => t.step.seq === 8).id); if (v !== undefined && v !== null) pm.collectionVariables.set('taskId8', String(v)); } catch (e) {}",
+                  "try { const v = (j.tasks.find(t => t.step.seq === 9).id); if (v !== undefined && v !== null) pm.collectionVariables.set('taskId9', String(v)); } catch (e) {}",
+                  "pm.test('Nine tasks, due dates worked out', () => { pm.expect(j.tasks.length).to.eql(9); const t = j.tasks.find(x => x.step.step_key === 'DRAFT_NOTICE'); pm.expect(t.due_date).to.eql('2026-12-03'); const m = j.tasks.find(x => x.step.step_key === 'SIGN_MINUTES'); pm.expect(m.due_date).to.eql('2027-01-09'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "This company's activities",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/companies/{{companyId}}/activities",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "companies",
+                "{{companyId}}",
+                "activities"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Includes progress counts', () => { pm.expect(j.instances.length).to.be.above(0); pm.expect(j.instances[0]).to.include.keys('tasks', 'done', 'overdue'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "One activity with tasks, evidence and confirmations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/instances/{{instanceId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "activities",
+                "instances",
+                "{{instanceId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Tasks carry step details and blockers', () => { pm.expect(j.tasks[1].blocked_by.length).to.be.above(0); pm.expect(j.tasks[0].step).to.include.keys('title', 'bindings', 'evidence'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Complete step 2 first -> 409 blocked",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/tasks/{{taskId2}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "activities",
+                "tasks",
+                "{{taskId2}}",
+                "status"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"completed\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "A step cannot be completed before the step it depends on."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 409', () => pm.response.to.have.status(409));",
+                  "pm.test('Error code is blocked', () => pm.expect(pm.response.json().error.code).to.eql('blocked'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Step 1 -> in progress",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/tasks/{{taskId1}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "activities",
+                "tasks",
+                "{{taskId1}}",
+                "status"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"in_progress\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Instance still active', () => pm.expect(j.instance.status).to.eql('active'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Step 1 -> completed",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/tasks/{{taskId1}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "activities",
+                "tasks",
+                "{{taskId1}}",
+                "status"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"completed\",\n  \"notes\": \"Date agreed with the Chairman\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Completed by me', () => { const t = j.tasks.find(x => x.step.seq === 1); pm.expect(t.status).to.eql('completed'); pm.expect(t.completed_at).to.be.a('string'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Step 2 -> completed",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/tasks/{{taskId2}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "activities",
+                "tasks",
+                "{{taskId2}}",
+                "status"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"completed\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Step 3 -> completed (warns about missing evidence)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/tasks/{{taskId3}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "activities",
+                "tasks",
+                "{{taskId3}}",
+                "status"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"completed\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Warning about mandatory evidence', () => pm.expect(j.warnings.join(' ')).to.include('No evidence'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Step 4 needs a confirmation -> 409",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/tasks/{{taskId4}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "activities",
+                "tasks",
+                "{{taskId4}}",
+                "status"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"completed\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 409', () => pm.response.to.have.status(409));",
+                  "pm.test('Error code is needs_confirmation', () => pm.expect(pm.response.json().error.code).to.eql('needs_confirmation'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Request the confirmation",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/tasks/{{taskId4}}/confirmations",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "activities",
+                "tasks",
+                "{{taskId4}}",
+                "confirmations"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "try { const v = (j.confirmation.id); if (v !== undefined && v !== null) pm.collectionVariables.set('confirmationId', String(v)); } catch (e) {}",
+                  "pm.test('Pending', () => pm.expect(j.confirmation.status).to.eql('pending'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Confirm it (an administrator may confirm their own request)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/confirmations/{{confirmationId}}/confirm",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "confirmations",
+                "{{confirmationId}}",
+                "confirm"
+              ]
+            },
+            "description": "For other users a *different* person must confirm: sign in as the manager and run this request."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Confirmed by a named person', () => { pm.expect(j.confirmation.status).to.eql('confirmed'); pm.expect(j.confirmation.confirmed_by).to.be.a('number'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Step 4 -> completed (now allowed)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/tasks/{{taskId4}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "activities",
+                "tasks",
+                "{{taskId4}}",
+                "status"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"completed\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Skip step 5",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/tasks/{{taskId5}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "activities",
+                "tasks",
+                "{{taskId5}}",
+                "status"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"skipped\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cancel the activity",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/instances/{{instanceId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "activities",
+                "instances",
+                "{{instanceId}}",
+                "status"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"cancelled\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Cancelled', () => pm.expect(j.instance.status).to.eql('cancelled'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Nothing moves while cancelled -> 409",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/tasks/{{taskId6}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "activities",
+                "tasks",
+                "{{taskId6}}",
+                "status"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"completed\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reopen the activity",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/instances/{{instanceId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "activities",
+                "instances",
+                "{{instanceId}}",
+                "status"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"active\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Active again', () => pm.expect(j.instance.status).to.eql('active'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Edit a task note (the only directly editable task field)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/entities/task_instance/{{taskId1}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "entities",
+                "task_instance",
+                "{{taskId1}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "try { const v = (j.row.updated_at); if (v !== undefined && v !== null) pm.collectionVariables.set('taskVersion', String(v)); } catch (e) {}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Save the note",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/entities/task_instance/{{taskId1}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "entities",
+                "task_instance",
+                "{{taskId1}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notes\": \"Edited from Postman\",\n  \"updated_at\": \"{{taskVersion}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Note saved', () => pm.expect(j.row.notes).to.eql('Edited from Postman'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Task status cannot be PATCHed directly -> 422",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/entities/task_instance/{{taskId1}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "entities",
+                "task_instance",
+                "{{taskId1}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"not_started\",\n  \"updated_at\": \"{{taskVersion}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 422', () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Link a record to a task",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/entities/task_record_link",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "entities",
+                "task_record_link"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"task_instance_id\": \"{{taskId1}}\",\n  \"entity_type\": \"meeting\",\n  \"entity_id\": \"{{seedMeetingId}}\",\n  \"mode\": \"write\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Linked record is labelled', () => pm.expect(j.row._labels.entity_id).to.be.a('string'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "09 Documents and evidence",
+      "item": [
+        {
+          "name": "Upload a document and link it to a meeting",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/upload",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "documents",
+                "upload"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "company_id",
+                  "value": "{{companyId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "sample_notice.pdf"
+                },
+                {
+                  "key": "entity_type",
+                  "value": "meeting",
+                  "type": "text"
+                },
+                {
+                  "key": "entity_id",
+                  "value": "{{seedMeetingId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "note",
+                  "value": "Uploaded from Postman",
+                  "type": "text"
+                }
+              ]
+            },
+            "description": "In Postman choose any small PDF/Word/Excel/image file for the `file` field (the collection expects `sample_notice.pdf` next to it; Newman needs `--working-dir`). Types: pdf, doc(x), xls(x), csv, txt, rtf, odt, ods, images. Maximum 25 MB."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "try { const v = (j.document.id); if (v !== undefined && v !== null) pm.collectionVariables.set('documentId', String(v)); } catch (e) {}",
+                  "try { const v = (j.document.sha256); if (v !== undefined && v !== null) pm.collectionVariables.set('documentSha', String(v)); } catch (e) {}",
+                  "pm.test('Fingerprinted and versioned', () => { pm.expect(j.document.sha256).to.have.lengthOf(64); pm.expect(j.document.version).to.be.at.least(1); pm.expect(j.evidence_link.entity_type).to.eql('meeting'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Download it again (integrity re-checked)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/{{documentId}}/download",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "documents",
+                "{{documentId}}",
+                "download"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Sent as an attachment', () => pm.expect(pm.response.headers.get('Content-Disposition')).to.include('attachment'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "The document's record",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/entities/document/{{documentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "entities",
+                "document",
+                "{{documentId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Fingerprint stored', () => pm.expect(j.row.sha256).to.eql(pm.collectionVariables.get('documentSha')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Upload with no file -> 422",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/upload",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "documents",
+                "upload"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "company_id",
+                  "value": "{{companyId}}",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 422', () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "10 Audit trail",
+      "item": [
+        {
+          "name": "Activity log for a company",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/audit?company_id={{companyId}}&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "audit"
+              ],
+              "query": [
+                {
+                  "key": "company_id",
+                  "value": "{{companyId}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Entries say who, what and when', () => { pm.expect(j.entries.length).to.be.above(0); pm.expect(j.entries[0]).to.include.keys('at', 'actor', 'operation', 'table', 'changes'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Everything I may see (filtered by table)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/audit?table=meeting&limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "audit"
+              ],
+              "query": [
+                {
+                  "key": "table",
+                  "value": "meeting"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Only meeting entries', () => j.entries.forEach(e => pm.expect(e.table).to.eql('meeting')));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "11 Administration (administrator only)",
+      "item": [
+        {
+          "name": "List users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/entities/app_user?q=client",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "entities",
+                "app_user"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "client"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "try { const v = (j.rows[0].id); if (v !== undefined && v !== null) pm.collectionVariables.set('clientUserId', String(v)); } catch (e) {}",
+                  "pm.test('Client user found', () => pm.expect(j.rows[0].email).to.include('client'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Set a user's sign-in password",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{clientUserId}}/password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users",
+                "{{clientUserId}}",
+                "password"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"new_password\": \"{{clientPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Re-sets the client demo user's password to the value in your environment (harmless)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create a user",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/entities/app_user",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "entities",
+                "app_user"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{newUserEmail}}\",\n  \"name\": \"Postman User\",\n  \"is_active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('newUserEmail', 'postman.' + Date.now() + '@example.test');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "try { const v = (j.row.id); if (v !== undefined && v !== null) pm.collectionVariables.set('newUserId', String(v)); } catch (e) {}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Grant that user read access to a company",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/entities/user_company_access",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "entities",
+                "user_company_access"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"{{newUserId}}\",\n  \"company_id\": \"{{companyId}}\",\n  \"access_level\": \"read\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Archive the user (users are never deleted)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/entities/app_user/{{newUserId}}/archive",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "entities",
+                "app_user",
+                "{{newUserId}}",
+                "archive"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Standard List values",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/entities/lookup_value?size=5",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "entities",
+                "lookup_value"
+              ],
+              "query": [
+                {
+                  "key": "size",
+                  "value": "5"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('102+ values', () => pm.expect(j.total).to.be.at.least(102));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "12 Isolation checks (signs in as the read-only client, then back as admin)",
+      "item": [
+        {
+          "name": "Login as the read-only client (Nexatech only)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{clientEmail}}\",\n  \"password\": \"{{clientPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Signs in. The test script stores the returned CSRF token in the collection variable `csrf`; the collection's pre-request script then sends it as the `X-CSRF-Token` header on every change. The session cookie is kept by Postman's cookie jar."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "try { const v = (j.csrf); if (v !== undefined && v !== null) pm.collectionVariables.set('csrf', String(v)); } catch (e) {}",
+                  "pm.test('Returns the user and a CSRF token', () => { pm.expect(j.csrf).to.be.a('string').and.not.empty; pm.expect(j.user.email).to.be.a('string'); });",
+                  "pm.test('is_admin is false', () => pm.expect(j.user.is_admin).to.eql(false));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Client sees only their company",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/companies",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "companies"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Exactly one company', () => pm.expect(j.companies.length).to.eql(1));",
+                  "pm.test('It is the client company', () => pm.expect(String(j.companies[0].id)).to.eql(pm.variables.get('clientCompanyId')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Another company's overview -> 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/companies/{{companyId}}/overview",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "companies",
+                "{{companyId}}",
+                "overview"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Another company's export -> 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/companies/{{companyId}}/export.xlsx",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "companies",
+                "{{companyId}}",
+                "export.xlsx"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Administration tables are hidden -> 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/entities/app_user",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "entities",
+                "app_user"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "A read-only user cannot write -> 403",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/entities/company_rta",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "entities",
+                "company_rta"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"company_id\": \"{{clientCompanyId}}\",\n  \"name\": \"Not allowed\",\n  \"valid_from\": \"2024-04-01\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));",
+                  "pm.test('Error code is forbidden', () => pm.expect(pm.response.json().error.code).to.eql('forbidden'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Calculated views are narrowed to their company",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/calc/v_current_directors",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "calc",
+                "v_current_directors"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Only their company rows', () => j.rows.forEach(r => pm.expect(String(r.company_id)).to.eql(pm.variables.get('clientCompanyId'))));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "People are limited to those linked to their company",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/entities/director",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "entities",
+                "director"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Fewer than the 12 people the administrator sees', () => pm.expect(j.total).to.be.below(12));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Client cannot start an activity -> 403",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/activities/instances",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "activities",
+                "instances"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"template_code\": \"BOARD_MEETING\",\n  \"company_id\": \"{{clientCompanyId}}\",\n  \"params\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sign out the client",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "logout"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sign back in as administrator",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Signs in. The test script stores the returned CSRF token in the collection variable `csrf`; the collection's pre-request script then sends it as the `X-CSRF-Token` header on every change. The session cookie is kept by Postman's cookie jar."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "try { const v = (j.csrf); if (v !== undefined && v !== null) pm.collectionVariables.set('csrf', String(v)); } catch (e) {}",
+                  "pm.test('Returns the user and a CSRF token', () => { pm.expect(j.csrf).to.be.a('string').and.not.empty; pm.expect(j.user.email).to.be.a('string'); });",
+                  "pm.test('is_admin is true', () => pm.expect(j.user.is_admin).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "AI assistant (Activities Dashboard; returns 503 ai_unavailable while AI_ENABLED=false)",
+      "item": [
+        {
+          "name": "Status (never shows a key)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/ai/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ai",
+                "status"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Company documents for the picker",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/ai/documents?company_id=2",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ai",
+                "documents?company_id=2"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Suggest meeting details from a stored document",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/ai/suggest",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ai",
+                "suggest"
+              ]
+            },
+            "description": "Reads the document and returns suggestions with the quote and page for each. Writes nothing.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"company_id\": 2,\n  \"document_id\": 1,\n  \"meeting_id\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Describe a meeting in a sentence",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/ai/intake",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ai",
+                "intake"
+              ]
+            },
+            "description": "Returns a pre-filled form. Creates nothing.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Board meeting of BrightMed on 12 June 2026 by video conferencing\",\n  \"company_id\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Draft a meeting notice",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/ai/meetings/1/board/notice/draft",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ai",
+                "meetings",
+                "1",
+                "board",
+                "notice",
+                "draft"
+              ]
+            },
+            "description": "Recipients come from the database. Sends nothing."
+          }
+        },
+        {
+          "name": "Send the approved notice",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/ai/meetings/1/board/notice/send",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ai",
+                "meetings",
+                "1",
+                "board",
+                "notice",
+                "send"
+              ]
+            },
+            "description": "Needs approve=true and the draft's fingerprint. Goes to the local test mail server while AI_SMTP_SANDBOX=true.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"approve\": true,\n  \"cover\": \"Dear {recipient_name},\\nPlease find the notice below.\",\n  \"fingerprint\": \"<from the draft>\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Ask a question with citations",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/ai/board/ask",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ai",
+                "board",
+                "ask"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"company_id\": 2,\n  \"question\": \"What quorum does a board meeting need?\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "13 Sign out",
+      "item": [
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "logout"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "let j = {}; try { j = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test('Signed out', () => pm.expect(j.ok).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Session is gone -> 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "me"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
